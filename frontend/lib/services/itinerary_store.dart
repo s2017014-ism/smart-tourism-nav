@@ -23,9 +23,17 @@ class ItineraryStore {
     return items;
   }
 
+  /// 儲存行程；若已存在相同 id 的行程則「覆蓋」它，否則新增。
   Future<void> save(SavedItinerary item) async {
     final prefs = await SharedPreferences.getInstance();
     final raw = List<String>.from(prefs.getStringList(_key) ?? const []);
+    raw.removeWhere((s) {
+      try {
+        return (jsonDecode(s) as Map)['id'] == item.id;
+      } catch (_) {
+        return false;
+      }
+    });
     raw.add(jsonEncode(item.toJson()));
     await prefs.setStringList(_key, raw);
   }

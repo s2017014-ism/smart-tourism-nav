@@ -14,7 +14,11 @@ import 'itinerary_screen.dart';
 import 'saved_itineraries_screen.dart';
 
 class MapScreen extends StatefulWidget {
-  const MapScreen({super.key});
+  const MapScreen({super.key, this.initialOrigin, this.initialDestination});
+
+  /// 由行程頁帶入的起點／終點；兩者皆有時，進入後自動規劃路線。
+  final LatLng? initialOrigin;
+  final LatLng? initialDestination;
 
   @override
   State<MapScreen> createState() => _MapScreenState();
@@ -49,6 +53,11 @@ class _MapScreenState extends State<MapScreen> {
     super.initState();
     _checkBackend();
     _loadWeather();
+    if (widget.initialOrigin != null) _origin = widget.initialOrigin;
+    if (widget.initialDestination != null) _destination = widget.initialDestination;
+    if (_origin != null && _destination != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _planRoute());
+    }
   }
 
   Future<void> _loadWeather() async {

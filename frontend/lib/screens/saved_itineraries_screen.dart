@@ -48,10 +48,17 @@ class _SavedItinerariesScreenState extends State<SavedItinerariesScreen> {
     await _load();
   }
 
-  void _open(SavedItinerary it) {
-    Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => ItineraryScreen(initialPlan: it.plan, initialSettings: it.settings),
+  Future<void> _open(SavedItinerary it) async {
+    await Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => ItineraryScreen(
+        initialPlan: it.plan,
+        initialSettings: it.settings,
+        initialSavedId: it.id,
+        initialName: it.name,
+      ),
     ));
+    // 回到列表時重新載入，讓「覆蓋儲存」的變更立即反映。
+    await _load();
   }
 
   @override

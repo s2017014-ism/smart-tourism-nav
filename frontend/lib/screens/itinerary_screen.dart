@@ -9,13 +9,24 @@ import '../models/saved_itinerary.dart';
 import '../services/api_client.dart';
 import '../services/itinerary_store.dart';
 import '../widgets/numbered_marker.dart';
+import 'map_screen.dart';
 
 class ItineraryScreen extends StatefulWidget {
-  const ItineraryScreen({super.key, this.initialPlan, this.initialSettings});
+  const ItineraryScreen({
+    super.key,
+    this.initialPlan,
+    this.initialSettings,
+    this.initialSavedId,
+    this.initialName,
+  });
 
   /// 由「我的行程」載入時帶入的既有行程與設定。
   final ItineraryPlan? initialPlan;
   final Map<String, dynamic>? initialSettings;
+
+  /// 由「我的行程」開啟時帶入的既有行程 id／名稱；非 null 表示可覆蓋儲存。
+  final String? initialSavedId;
+  final String? initialName;
 
   @override
   State<ItineraryScreen> createState() => _ItineraryScreenState();
@@ -38,6 +49,8 @@ class _ItineraryScreenState extends State<ItineraryScreen> {
   List<Poi> _allPois = [];
   bool _poisLoaded = false;
   bool _accessible = false; // 合併：避開階梯 + 避免陡坡
+  String? _savedId;   // 目前對應的已儲存行程 id（用於覆蓋儲存）
+  String? _savedName; // 目前對應的已儲存行程名稱
   final TextEditingController _nlCtrl = TextEditingController();
   bool _nlLoading = false;
   String? _nlSummary;
@@ -99,6 +112,8 @@ class _ItineraryScreenState extends State<ItineraryScreen> {
       _accessible = (s['avoid_stairs'] == true) || (s['max_slope_pct'] != null);
     }
     _plan = widget.initialPlan;
+    _savedId = widget.initialSavedId;
+    _savedName = widget.initialName;
     if (_plan != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _fit(_plan!));
     }
@@ -215,45 +230,103 @@ class _ItineraryScreenState extends State<ItineraryScreen> {
   void _showStops() {
     final plan = _plan;
     if (plan == null) return;
+    // 選取的站序索引（最多兩個）：第一個＝起點、第二個＝終點。
+    final selected = <int>[];
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      builder: (ctx) => DraggableScrollableSheet(
-        expand: false,
-        initialChildSize: 0.6,
-        maxChildSize: 0.9,
-        builder: (_, scrollCtrl) => Column(
-          children: [
-            const SizedBox(height: 12),
-            Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.shade400, borderRadius: BorderRadius.circular(2))),
-            const SizedBox(height: 8),
-            Text('行程共 ${plan.stops.length} 站 · ${plan.distanceText} · 約 ${plan.durationText}',
-                style: const TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            Expanded(
-              child: ListView.separated(
-                controller: scrollCtrl,
-                itemCount: plan.stops.length,
-                separatorBuilder: (_, _) => const Divider(height: 1),
-                itemBuilder: (_, i) {
-                  final s = plan.stops[i];
-                  return ListTile(
-                    leading: CircleAvatar(
-                      backgroundColor: _catColor(s.category),
-                      child: Text('${s.order}', style: const TextStyle(color: Colors.white, fontSize: 13)),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheet) {
+          void toggle(int i) {
+            setSheet(() {
+              if (selected.remove(i)) return; // 已選 → 取消
+              if (selected.length >= 2) selected.removeAt(0); // 已有兩個 → 換掉第一個
+              selected.add(i);
+            });
+          }
+
+          LatLng? pickedPoint(int i) =>
+              (i >= 0 && i < selected.length) ? plan.stops[selected[i]].point : null;
+
+          return DraggableScrollableSheet(
+            expand: false,
+            initialChildSize: 0.65,
+            maxChildSize: 0.95,
+            builder: (_, scrollCtrl) => Column(
+              children: [
+                const SizedBox(height: 12),
+                Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.shade400, borderRadius: BorderRadius.circular(2))),
+                const SizedBox(height: 8),
+                Text('行程共 ${plan.stops.length} 站 · ${plan.distanceText} · 約 ${plan.durationText}',
+                    style: const TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 4),
+                Text(
+                  selected.length < 2 ? '點選兩個景點，即可導航其間路程' : '起點：${plan.stops[selected[0]].name}　→　終點：${plan.stops[selected[1]].name}',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                Expanded(
+                  child: ListView.separated(
+                    controller: scrollCtrl,
+                    itemCount: plan.stops.length,
+                    separatorBuilder: (_, _) => const Divider(height: 1),
+                    itemBuilder: (_, i) {
+                      final s = plan.stops[i];
+                      final sel = selected.indexOf(i); // 0=起點, 1=終點, -1=未選
+                      return ListTile(
+                        selected: sel >= 0,
+                        selectedTileColor: Colors.blue.withValues(alpha: 0.08),
+                        leading: CircleAvatar(
+                          backgroundColor: sel >= 0
+                              ? (sel == 0 ? Colors.green : Colors.red)
+                              : _catColor(s.category),
+                          child: Text(
+                            sel == 0 ? '起' : (sel == 1 ? '終' : '${s.order}'),
+                            style: const TextStyle(color: Colors.white, fontSize: 13),
+                          ),
+                        ),
+                        title: Text(s.name),
+                        subtitle: Text(
+                          '${s.arrival}–${s.departure}　${s.categoryLabel}'
+                          '${i == 0 ? '' : '　步行 ${s.travelFromPrevM.toStringAsFixed(0)}m'}',
+                        ),
+                        trailing: Text('${s.dwellMin}分', style: TextStyle(color: Colors.grey.shade600)),
+                        onTap: () => toggle(i),
+                      );
+                    },
+                  ),
+                ),
+                SafeArea(
+                  top: false,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: selected.length == 2
+                            ? () {
+                                final a = pickedPoint(0)!;
+                                final b = pickedPoint(1)!;
+                                final from = plan.stops[selected[0]].name;
+                                final to = plan.stops[selected[1]].name;
+                                Navigator.pop(ctx);
+                                Navigator.of(context).push(MaterialPageRoute(
+                                  builder: (_) => MapScreen(initialOrigin: a, initialDestination: b),
+                                ));
+                                _snack('規劃 $from → $to 的路線');
+                              }
+                            : null,
+                        icon: const Icon(Icons.directions),
+                        label: Text(selected.length == 2 ? '導航這兩點' : '請選擇兩個景點'),
+                      ),
                     ),
-                    title: Text(s.name),
-                    subtitle: Text(
-                      '${s.arrival}–${s.departure}　${s.categoryLabel}'
-                      '${i == 0 ? '' : '　步行 ${s.travelFromPrevM.toStringAsFixed(0)}m'}',
-                    ),
-                    trailing: Text('${s.dwellMin}分', style: TextStyle(color: Colors.grey.shade600)),
-                  );
-                },
-              ),
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
@@ -348,12 +421,8 @@ class _ItineraryScreenState extends State<ItineraryScreen> {
     );
   }
 
-  Future<void> _save() async {
-    final plan = _plan;
-    if (plan == null) return;
-
-    final now = DateTime.now();
-    final ctrl = TextEditingController(text: '澳門行程 ${now.month}/${now.day}');
+  Future<String?> _askName(DateTime now, {String? initial}) async {
+    final ctrl = TextEditingController(text: initial ?? '澳門行程 ${now.month}/${now.day}');
     final name = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -369,8 +438,15 @@ class _ItineraryScreenState extends State<ItineraryScreen> {
         ],
       ),
     );
-    if (name == null || name.isEmpty) return;
+    if (name == null || name.isEmpty) return null;
+    return name;
+  }
 
+  Future<void> _save() async {
+    final plan = _plan;
+    if (plan == null) return;
+
+    final now = DateTime.now();
     final settings = <String, dynamic>{
       'start': {'lat': _start.latitude, 'lng': _start.longitude},
       'departure_time': _departure,
@@ -382,16 +458,54 @@ class _ItineraryScreenState extends State<ItineraryScreen> {
       'max_slope_pct': _accessible ? 12 : null,
     };
 
+    String? id;
+    String? name;
+    var overwritten = false;
+
+    if (_savedId != null) {
+      // 由「我的行程」開啟的既有行程 → 詢問覆蓋原行程或另存新檔
+      final choice = await showDialog<String>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('儲存行程'),
+          content: Text('此行程由「${_savedName ?? ''}」開啟。\n要覆蓋原行程，還是另存新檔？'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, 'cancel'), child: const Text('取消')),
+            TextButton(onPressed: () => Navigator.pop(ctx, 'new'), child: const Text('另存新檔')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, 'overwrite'), child: const Text('覆蓋原行程')),
+          ],
+        ),
+      );
+      if (choice == null || choice == 'cancel') return;
+      if (choice == 'overwrite') {
+        id = _savedId;
+        name = _savedName ?? '澳門行程 ${now.month}/${now.day}';
+        overwritten = true;
+      } else {
+        name = await _askName(now);
+        if (name == null) return;
+        id = now.microsecondsSinceEpoch.toString();
+      }
+    } else {
+      name = await _askName(now);
+      if (name == null) return;
+      id = now.microsecondsSinceEpoch.toString();
+    }
+
     try {
       await _store.save(SavedItinerary(
-        id: now.microsecondsSinceEpoch.toString(),
+        id: id!,
         name: name,
         createdAt: now,
         plan: plan,
         settings: settings,
       ));
       if (!mounted) return;
-      _snack('已儲存「$name」，可在「我的行程」查看');
+      setState(() {
+        _savedId = id;
+        _savedName = name;
+      });
+      _snack(overwritten ? '已覆蓋「$name」' : '已儲存「$name」，可在「我的行程」查看');
     } catch (e) {
       if (!mounted) return;
       _snack('儲存失敗：$e');
