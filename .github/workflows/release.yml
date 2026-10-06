@@ -1,0 +1,131 @@
+name: Build releases
+
+# 於發布 Release 時，在對應系統的 runner 上建置各平台並附到該 Release。
+# 也可在 Actions 頁面手動觸發（workflow_dispatch）。
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  FLUTTER_VERSION: "3.47.5"
+  APP_NAME: smart-tourism-nav
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: Build APK
+        working-directory: frontend
+        run: |
+          flutter pub get
+          flutter build apk --release
+      - name: Rename
+        run: cp frontend/build/app/outputs/flutter-apk/app-release.apk ${{ env.APP_NAME }}-android.apk
+      - uses: softprops/action-gh-release@v2
+        if: github.event_name == 'release'
+        with:
+          files: ${{ env.APP_NAME }}-android.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: ${{ env.APP_NAME }}-android.apk
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: Build Windows
+        working-directory: frontend
+        run: |
+          flutter pub get
+          flutter build windows --release
+      - name: Zip
+        shell: pwsh
+        run: |
+          Compress-Archive -Path frontend/build/windows/x64/runner/Release/* `
+            -DestinationPath ${{ env.APP_NAME }}-windows-x64.zip
+      - uses: softprops/action-gh-release@v2
+        if: github.event_name == 'release'
+        with:
+          files: ${{ env.APP_NAME }}-windows-x64.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-zip
+          path: ${{ env.APP_NAME }}-windows-x64.zip
+
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Linux desktop deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: Build Linux
+        working-directory: frontend
+        run: |
+          flutter pub get
+          flutter build linux --release
+      - name: Package
+        run: |
+          tar -czf ${{ env.APP_NAME }}-linux-x64.tar.gz \
+            -C frontend/build/linux/x64/release/bundle .
+      - uses: softprops/action-gh-release@v2
+        if: github.event_name == 'release'
+        with:
+          files: ${{ env.APP_NAME }}-linux-x64.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-targz
+          path: ${{ env.APP_NAME }}-linux-x64.tar.gz
+
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: Build macOS
+        working-directory: frontend
+        run: |
+          flutter pub get
+          flutter build macos --release
+      - name: Zip .app
+        run: |
+          cd frontend/build/macos/Build/Products/Release
+          zip -r -y "$GITHUB_WORKSPACE/${{ env.APP_NAME }}-macos.zip" *.app
+      - uses: softprops/action-gh-release@v2
+        if: github.event_name == 'release'
+        with:
+          files: ${{ env.APP_NAME }}-macos.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-zip
+          path: ${{ env.APP_NAME }}-macos.zip
