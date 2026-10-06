@@ -104,9 +104,40 @@ def get_graph(force: bool = False) -> nx.MultiDiGraph:
 
 def graph_info() -> dict:
     G = get_graph()
+    t = _terrain_counts(G)
     return {
         "nodes": G.number_of_nodes(),
         "edges": G.number_of_edges(),
         "bbox": settings.bbox,
         "network_type": settings.network_type,
+        "stairs_edges": t["stairs_edges"],
+        "grade_edges": t["grade_edges"],
+        "stairs_data": t["stairs_edges"] > 0,
+        "slope_data": t["grade_edges"] > 0,
+    }
+
+
+def _terrain_counts(G: nx.MultiDiGraph) -> dict:
+    total = stairs = grade = 0
+    for _, _, _, d in G.edges(keys=True, data=True):
+        total += 1
+        if d.get("is_stairs"):
+            stairs += 1
+        if d.get("grade_abs") is not None:
+            grade += 1
+    return {"edges": total, "stairs_edges": stairs, "grade_edges": grade}
+
+
+def terrain_info() -> dict:
+    """回報路網是否含階梯與坡度資料（供啟動紀錄與 /meta 診斷用）。"""
+    try:
+        G = get_graph()
+    except Exception as exc:  # noqa: BLE001
+        return {"available": False, "error": str(exc)}
+    t = _terrain_counts(G)
+    return {
+        "available": True,
+        **t,
+        "stairs_data": t["stairs_edges"] > 0,
+        "slope_data": t["grade_edges"] > 0,
     }

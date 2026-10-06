@@ -19,9 +19,10 @@ build/
 Thumbs.db
 .DS_Store
 
-# 大型資料 / 快取
+# 大型資料 / 快取（路網快取需隨附，才能離線提供階梯／坡度避讓資料）
 backend/data/cache/*
 !backend/data/cache/.gitkeep
+!backend/data/cache/*.graphml
 backend/data/raw/*
 !backend/data/raw/.gitkeep
 

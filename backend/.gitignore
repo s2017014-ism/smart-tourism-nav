@@ -6,8 +6,9 @@ venv/
 env/
 .env
 
-# 快取與大型原始資料不入版控
+# 快取與大型原始資料不入版控（路網快取例外：需隨附以提供階梯／坡度資料）
 data/cache/*
 !data/cache/.gitkeep
+!data/cache/*.graphml
 data/raw/*
 !data/raw/.gitkeep

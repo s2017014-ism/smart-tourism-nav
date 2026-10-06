@@ -3,3 +3,5 @@
 *.command text eol=lf
 *.bat text eol=crlf
 *.ps1 text eol=crlf
+# 路網快取（GraphML）為大型資料，勿做換行正規化
+*.graphml -text

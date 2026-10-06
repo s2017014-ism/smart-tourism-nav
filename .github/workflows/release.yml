@@ -74,6 +74,8 @@ jobs:
           New-Item -ItemType Directory -Force "$pkg/backend/data" | Out-Null
           Copy-Item "backend/data/*.json" "$pkg/backend/data/"
           Copy-Item "backend/data/*.geojson" "$pkg/backend/data/"
+          New-Item -ItemType Directory -Force "$pkg/backend/data/cache" | Out-Null
+          Copy-Item "backend/data/cache/*.graphml" "$pkg/backend/data/cache/" -ErrorAction SilentlyContinue
           Copy-Item "launcher/start-backend.bat" $pkg
           Copy-Item "launcher/使用說明.txt" $pkg
           # 確保 .bat 為 CRLF（cmd 需要）
@@ -121,6 +123,8 @@ jobs:
           cp -r backend/scripts pkg-linux/backend/
           cp backend/requirements.txt backend/.env.example pkg-linux/backend/
           cp backend/data/*.json backend/data/*.geojson pkg-linux/backend/data/
+          mkdir -p pkg-linux/backend/data/cache
+          cp backend/data/cache/*.graphml pkg-linux/backend/data/cache/ 2>/dev/null || true
           cp launcher/start-backend.sh pkg-linux/
           chmod +x pkg-linux/start-backend.sh
           cp "launcher/使用說明.txt" pkg-linux/
@@ -159,6 +163,8 @@ jobs:
           cp -r backend/scripts pkg-macos/backend/
           cp backend/requirements.txt backend/.env.example pkg-macos/backend/
           cp backend/data/*.json backend/data/*.geojson pkg-macos/backend/data/
+          mkdir -p pkg-macos/backend/data/cache
+          cp backend/data/cache/*.graphml pkg-macos/backend/data/cache/ 2>/dev/null || true
           cp launcher/start-backend.sh launcher/start-backend.command pkg-macos/
           chmod +x pkg-macos/start-backend.sh pkg-macos/start-backend.command
           cp "launcher/使用說明.txt" pkg-macos/

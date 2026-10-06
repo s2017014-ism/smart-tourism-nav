@@ -20,7 +20,7 @@ from .api import transit as transit_api
 from .api import weather as weather_api
 from .config import settings
 from .graph import multimodal
-from .graph.loader import get_graph, graph_info
+from .graph.loader import get_graph, graph_info, terrain_info
 from .services import llm as llm_service
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
@@ -41,6 +41,18 @@ async def lifespan(_app: FastAPI):
         log.info("多模態路網就緒：%d 節點 / %d 邊", H.number_of_nodes(), H.number_of_edges())
     except Exception as exc:  # noqa: BLE001
         log.warning("多模態路網暖機失敗（可稍後重試）：%s", exc)
+    t = terrain_info()
+    if t.get("slope_data"):
+        log.info(
+            "地形資料：坡度 %d/%d 條邊、階梯 %d 條（無障礙／坡度避讓可用）",
+            t["grade_edges"], t["edges"], t["stairs_edges"],
+        )
+    else:
+        log.warning(
+            "地形資料：缺少坡度（不會避開陡坡）。請確認 backend/data/cache/ 內含附高程的路網快取，"
+            "或已下載 DEM（scripts/download_dem.py）。階梯 %s 條。",
+            t.get("stairs_edges", 0),
+        )
     if llm_service.llm_configured():
         log.info("LLM 已設定：%s（自然語言規劃可用）", settings.llm_model)
     else:
