@@ -35,6 +35,7 @@ class _MapScreenState extends State<MapScreen> {
 
   bool _accessible = false; // 合併：避開階梯 + 避免陡坡
   bool _rainMode = false;   // 雨天模式（提高步行成本）
+  bool _rainModeTouched = false; // 使用者是否手動調整過雨天模式
   Weather? _weather;
   bool _transitMode = false;
   bool _loading = false;
@@ -64,7 +65,11 @@ class _MapScreenState extends State<MapScreen> {
     try {
       final w = await _api.fetchWeather();
       if (!mounted) return;
-      setState(() => _weather = w);
+      setState(() {
+        _weather = w;
+        // 現時有雨 → 自動開啟雨天模式（若使用者尚未手動調整過）。
+        if (!_rainModeTouched && w.isRaining) _rainMode = true;
+      });
     } catch (_) {
       // 天氣為附加功能，失敗時靜默略過
     }
@@ -597,7 +602,8 @@ class _MapScreenState extends State<MapScreen> {
                   Padding(
                     padding: const EdgeInsets.only(bottom: 2),
                     child: Text(
-                      '目前天氣：${_weather!.label}${_weather!.isRaining ? '　（現時有雨）' : ''}',
+                      '目前天氣：${_weather!.label}'
+                      '${_weather!.isRaining ? '　（現時有雨${_rainMode ? '，已自動開啟雨天模式' : ''}）' : ''}',
                       style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
                     ),
                   ),
@@ -605,8 +611,14 @@ class _MapScreenState extends State<MapScreen> {
                   contentPadding: EdgeInsets.zero,
                   dense: true,
                   title: const Text('雨天模式（少走路，多搭車）'),
+                  subtitle: _weather?.isRaining == true
+                      ? const Text('現時有雨，已自動開啟', style: TextStyle(fontSize: 11))
+                      : null,
                   value: _rainMode,
-                  onChanged: (v) => setState(() => _rainMode = v),
+                  onChanged: (v) => setState(() {
+                    _rainMode = v;
+                    _rainModeTouched = true;
+                  }),
                 ),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
