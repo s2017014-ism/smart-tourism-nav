@@ -16,6 +16,7 @@ class RoutePreferences(BaseModel):
     """使用者對路線的偏好。Phase 1 只用得到 avoid_stairs 與步行速度。"""
 
     avoid_stairs: bool = Field(False, description="避開階梯（推嬰兒車／帶大件行李）")
+    avoid_rain: bool = Field(False, description="雨天模式：提高步行成本，偏好少走路的方案")
     max_slope_pct: float | None = Field(
         None, description="可接受最大坡度（%）。超過則封鎖該路段，需 DEM 資料（Phase 4）"
     )

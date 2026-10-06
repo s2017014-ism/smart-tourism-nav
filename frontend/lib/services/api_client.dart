@@ -9,6 +9,7 @@ import '../models/poi.dart';
 import '../models/route_plan.dart';
 import '../models/text_plan.dart';
 import '../models/transit_plan.dart';
+import '../models/weather.dart';
 
 /// 與 FastAPI 後端溝通。
 class ApiClient {
@@ -21,13 +22,18 @@ class ApiClient {
     required LatLng destination,
     bool avoidStairs = false,
     double? maxSlopePct,
+    bool avoidRain = false,
   }) async {
     final uri = Uri.parse('$apiBaseUrl/api/v1/route');
 
     final body = jsonEncode({
       'origin': {'lat': origin.latitude, 'lng': origin.longitude},
       'destination': {'lat': destination.latitude, 'lng': destination.longitude},
-      'preferences': {'avoid_stairs': avoidStairs, 'max_slope_pct': maxSlopePct},
+      'preferences': {
+        'avoid_stairs': avoidStairs,
+        'max_slope_pct': maxSlopePct,
+        'avoid_rain': avoidRain,
+      },
     });
 
     final resp = await _client
@@ -102,13 +108,18 @@ class ApiClient {
     required LatLng destination,
     bool avoidStairs = false,
     double? maxSlopePct,
+    bool avoidRain = false,
     String? departureTime,
   }) async {
     final uri = Uri.parse('$apiBaseUrl/api/v1/transit-route');
     final body = jsonEncode({
       'origin': {'lat': origin.latitude, 'lng': origin.longitude},
       'destination': {'lat': destination.latitude, 'lng': destination.longitude},
-      'preferences': {'avoid_stairs': avoidStairs, 'max_slope_pct': maxSlopePct},
+      'preferences': {
+        'avoid_stairs': avoidStairs,
+        'max_slope_pct': maxSlopePct,
+        'avoid_rain': avoidRain,
+      },
       'departure_time': departureTime,
     });
     final resp = await _client
@@ -133,6 +144,17 @@ class ApiClient {
       throw Exception('後端回應 ${resp.statusCode}：${resp.body}');
     }
     return TextPlanResult.fromJson(jsonDecode(utf8.decode(resp.bodyBytes)) as Map<String, dynamic>);
+  }
+
+  Future<Weather> fetchWeather({double? lat, double? lng}) async {
+    final q = (lat != null && lng != null) ? '?lat=$lat&lon=$lng' : '';
+    final resp = await _client
+        .get(Uri.parse('$apiBaseUrl/api/v1/weather$q'))
+        .timeout(const Duration(seconds: 15));
+    if (resp.statusCode != 200) {
+      throw Exception('後端回應 ${resp.statusCode}');
+    }
+    return Weather.fromJson(jsonDecode(utf8.decode(resp.bodyBytes)) as Map<String, dynamic>);
   }
 
   Future<bool> health() async {

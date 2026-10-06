@@ -7,6 +7,7 @@ import '../config.dart';
 import '../models/poi.dart';
 import '../models/route_plan.dart';
 import '../models/transit_plan.dart';
+import '../models/weather.dart';
 import '../services/api_client.dart';
 import '../widgets/numbered_marker.dart';
 import 'itinerary_screen.dart';
@@ -29,6 +30,8 @@ class _MapScreenState extends State<MapScreen> {
   TransitPlan? _transitPlan;
 
   bool _accessible = false; // 合併：避開階梯 + 避免陡坡
+  bool _rainMode = false;   // 雨天模式（提高步行成本）
+  Weather? _weather;
   bool _transitMode = false;
   bool _loading = false;
   bool _topHidden = false;
@@ -45,6 +48,17 @@ class _MapScreenState extends State<MapScreen> {
   void initState() {
     super.initState();
     _checkBackend();
+    _loadWeather();
+  }
+
+  Future<void> _loadWeather() async {
+    try {
+      final w = await _api.fetchWeather();
+      if (!mounted) return;
+      setState(() => _weather = w);
+    } catch (_) {
+      // 天氣為附加功能，失敗時靜默略過
+    }
   }
 
   Future<void> _checkBackend() async {
@@ -82,6 +96,7 @@ class _MapScreenState extends State<MapScreen> {
           destination: destination,
           avoidStairs: _accessible,
           maxSlopePct: _accessible ? 12 : null,
+          avoidRain: _rainMode,
           departureTime: _transitTime,
         );
         if (!mounted) return;
@@ -97,6 +112,7 @@ class _MapScreenState extends State<MapScreen> {
           destination: destination,
           avoidStairs: _accessible,
           maxSlopePct: _accessible ? 12 : null,
+          avoidRain: _rainMode,
         );
         if (!mounted) return;
         setState(() {
@@ -567,6 +583,21 @@ class _MapScreenState extends State<MapScreen> {
                   title: const Text('無障礙路線（避開階梯與陡坡）'),
                   value: _accessible,
                   onChanged: (v) => setState(() => _accessible = v),
+                ),
+                if (_weather != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 2),
+                    child: Text(
+                      '目前天氣：${_weather!.label}${_weather!.isRaining ? '　（現時有雨）' : ''}',
+                      style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                    ),
+                  ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  title: const Text('雨天模式（少走路，多搭車）'),
+                  value: _rainMode,
+                  onChanged: (v) => setState(() => _rainMode = v),
                 ),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,

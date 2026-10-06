@@ -52,6 +52,20 @@ def model_name() -> str:
     return settings.llm_model
 
 
+def status() -> dict:
+    """回報 LLM 設定狀態，方便除錯。"""
+    configured = llm_configured()
+    return {
+        "configured": configured,
+        "model": settings.llm_model if configured else None,
+        "base_url_set": bool(settings.llm_base_url),
+        "api_key_set": bool(settings.llm_api_key),
+        "hint": ""
+        if configured
+        else "請在 backend/.env 設定 STN_LLM_BASE_URL 與 STN_LLM_API_KEY（行首不能有 #），存檔後需重新啟動後端。",
+    }
+
+
 def _post_chat(messages: list[dict], *, tools=None, tool_choice=None, temperature: float = 0.2) -> dict:
     url = settings.llm_base_url.rstrip("/") + "/chat/completions"
     body: dict = {"model": settings.llm_model, "messages": messages, "temperature": temperature}

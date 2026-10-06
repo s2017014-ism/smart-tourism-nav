@@ -34,6 +34,7 @@ import osmnx as ox
 from ..config import settings
 from ..schemas import RoutePreferences
 from ..optimize.slope import slope_factor
+from ..optimize.costs import rain_factor
 
 log = logging.getLogger(__name__)
 
@@ -190,7 +191,7 @@ def _edge_cost(data: dict, prefs: RoutePreferences, walk_speed: float) -> float 
             length = float(data.get("length", 0.0))
         except (TypeError, ValueError):
             length = 0.0
-        return (length / walk_speed) * slope_factor(data, prefs.max_slope_pct)
+        return (length / walk_speed) * slope_factor(data, prefs.max_slope_pct) * rain_factor(prefs)
     if mode == "board":
         return WAIT_TIME_S + TRANSFER_PENALTY_S
     if mode == "alight":

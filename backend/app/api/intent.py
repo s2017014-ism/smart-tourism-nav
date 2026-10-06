@@ -30,6 +30,11 @@ def parse_intent(req: PlanFromTextRequest) -> TripIntent:
     return intent
 
 
+@router.get("/llm/status", summary="LLM 設定狀態（除錯用）")
+def llm_status() -> dict:
+    return llm_service.status()
+
+
 @router.post(
     "/plan-from-text",
     response_model=PlanFromTextResponse,

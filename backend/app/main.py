@@ -17,9 +17,11 @@ from .api import itinerary as itinerary_api
 from .api import poi as poi_api
 from .api import route as route_api
 from .api import transit as transit_api
+from .api import weather as weather_api
 from .config import settings
 from .graph import multimodal
 from .graph.loader import get_graph, graph_info
+from .services import llm as llm_service
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("smartnav")
@@ -39,6 +41,13 @@ async def lifespan(_app: FastAPI):
         log.info("多模態路網就緒：%d 節點 / %d 邊", H.number_of_nodes(), H.number_of_edges())
     except Exception as exc:  # noqa: BLE001
         log.warning("多模態路網暖機失敗（可稍後重試）：%s", exc)
+    if llm_service.llm_configured():
+        log.info("LLM 已設定：%s（自然語言規劃可用）", settings.llm_model)
+    else:
+        log.warning(
+            "LLM 未設定（將使用規則式解析）。請於 backend/.env 設定 "
+            "STN_LLM_BASE_URL 與 STN_LLM_API_KEY，存檔後重新啟動後端。"
+        )
     yield
 
 
@@ -57,6 +66,7 @@ app.include_router(poi_api.router, prefix=settings.api_prefix)
 app.include_router(itinerary_api.router, prefix=settings.api_prefix)
 app.include_router(transit_api.router, prefix=settings.api_prefix)
 app.include_router(intent_api.router, prefix=settings.api_prefix)
+app.include_router(weather_api.router, prefix=settings.api_prefix)
 
 
 @app.get("/health", tags=["meta"])

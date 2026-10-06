@@ -43,6 +43,10 @@ class Settings(BaseSettings):
     llm_api_key: str | None = None
     llm_model: str = "qwen-plus"
 
+    # ---- 天氣（Phase 6；Open-Meteo，免金鑰）----
+    weather_lat: float = 22.1987
+    weather_lon: float = 113.5439
+
     @property
     def bbox(self) -> tuple[float, float, float, float]:
         """OSMnx graph_from_bbox 需要的 (left, bottom, right, top)。"""

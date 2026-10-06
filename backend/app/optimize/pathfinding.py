@@ -19,6 +19,7 @@ import osmnx as ox
 
 from ..config import settings
 from ..schemas import LatLng, RoutePreferences, RouteStep
+from .costs import rain_factor
 from .slope import slope_factor
 
 INF = math.inf
@@ -39,7 +40,8 @@ def _edge_cost(data: dict, prefs: RoutePreferences, speed: float) -> float:
         length = 0.0
 
     # Phase 4：坡度（DEM）。以懲罰引導走平緩路，但不封鎖（保證可達）。
-    return (length / speed) * slope_factor(data, prefs.max_slope_pct)
+    # Phase 6：雨天模式提高步行成本。
+    return (length / speed) * slope_factor(data, prefs.max_slope_pct) * rain_factor(prefs)
 
 
 def build_cost_graph(G: nx.MultiDiGraph, prefs: RoutePreferences) -> nx.DiGraph:
