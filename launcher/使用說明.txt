@@ -1,0 +1,40 @@
+適應型智慧旅遊導航與路徑調配系統 ── 使用說明
+================================================
+
+【本資料夾內容】
+  * 本應用程式（前端）
+  * backend/                 後端服務原始碼
+  * start-backend.bat        （Windows）啟動後端
+  * start-backend.sh         （Linux / macOS）啟動後端
+  * start-backend.command    （macOS 可雙擊）啟動後端
+
+【使用步驟】
+  1. 先啟動後端（本 App 必須連線到後端才能運作）：
+       Windows：雙擊 start-backend.bat
+       Linux  ：在終端機執行   ./start-backend.sh
+       macOS  ：雙擊 start-backend.command
+     * 首次啟動會自動建立 Python 環境並安裝套件，需要網路，可能數分鐘。
+     * 需先安裝 Python 3.11 或以上（Windows 安裝時請勾選 Add python.exe to PATH）。
+     * 出現「Uvicorn running on http://127.0.0.1:8000」即代表成功；請保持該視窗開啟。
+  2. 再開啟本應用程式（前端）。App 會自動連線到 http://127.0.0.1:8000。
+
+【常見問題】
+  * App 顯示「無法連線後端」→ 確認後端視窗仍在執行，且連接埠為 8000。
+  * 首次使用會自動下載 OpenStreetMap 步行路網（約 30~90 秒），之後會快取。
+  * 「坡度／階梯避讓」功能需要 SRTM 高程檔；如需啟用，請在 backend/ 內執行：
+        python scripts/download_dem.py
+    （會下載並產生高程資料，之後重啟後端即可生效。）
+
+【啟用「AI 規劃」（自然語言）功能】
+  * 需要一組 LLM API 金鑰（支援任何 OpenAI 相容服務，例如 DeepSeek）。
+  * 請將 backend/.env.example 複製為 backend/.env，並填入：
+        STN_LLM_BASE_URL=https://api.deepseek.com/v1
+        STN_LLM_MODEL=deepseek-chat
+        STN_LLM_API_KEY=你的金鑰
+  * 未填金鑰時仍可使用，會改以「規則式」解析（source=rules）。
+
+【其他】
+  * Windows / macOS 版本未經數位簽章，首次開啟可能需略過 SmartScreen / Gatekeeper 警告。
+  * Android 版 APK 以開發用金鑰簽署，可直接側載安裝；手機需與後端在同一網路，
+    並將 App 的後端位址改為電腦的區網 IP（預設為 10.0.2.2，供模擬器使用）。
+  * 詳細操作與示範請見專案 README 與 docs/DEMO.md。

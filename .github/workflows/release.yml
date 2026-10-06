@@ -1,7 +1,8 @@
 name: Build releases
 
-# 於發布 Release 時，在對應系統的 runner 上建置各平台並附到該 Release。
-# 也可在 Actions 頁面手動觸發（workflow_dispatch）。
+# 於發布 Release 時，在對應系統的 runner 上建置各平台，
+# 並將「後端原始碼 + 啟動腳本 + 使用說明」一併打包，
+# 最後自動附加到該 Release。
 on:
   release:
     types: [published]
@@ -58,11 +59,32 @@ jobs:
         run: |
           flutter pub get
           flutter build windows --release
+      - name: Assemble package (app + backend + launcher)
+        shell: pwsh
+        run: |
+          $pkg = "pkg-windows"
+          if (Test-Path $pkg) { Remove-Item -Recurse -Force $pkg }
+          New-Item -ItemType Directory -Force $pkg | Out-Null
+          Copy-Item -Recurse "frontend/build/windows/x64/runner/Release/*" $pkg
+          New-Item -ItemType Directory -Force "$pkg/backend" | Out-Null
+          Copy-Item -Recurse "backend/app" "$pkg/backend/"
+          Copy-Item -Recurse "backend/scripts" "$pkg/backend/"
+          Copy-Item "backend/requirements.txt" "$pkg/backend/"
+          Copy-Item "backend/.env.example" "$pkg/backend/"
+          New-Item -ItemType Directory -Force "$pkg/backend/data" | Out-Null
+          Copy-Item "backend/data/*.json" "$pkg/backend/data/"
+          Copy-Item "backend/data/*.geojson" "$pkg/backend/data/"
+          Copy-Item "launcher/start-backend.bat" $pkg
+          Copy-Item "launcher/使用說明.txt" $pkg
+          # 確保 .bat 為 CRLF（cmd 需要）
+          $bat = Join-Path $pkg "start-backend.bat"
+          $c = ([IO.File]::ReadAllText($bat) -replace "`r`n", "`n") -replace "`n", "`r`n"
+          [IO.File]::WriteAllText($bat, $c, [Text.Encoding]::ASCII)
       - name: Zip
         shell: pwsh
         run: |
-          Compress-Archive -Path frontend/build/windows/x64/runner/Release/* `
-            -DestinationPath ${{ env.APP_NAME }}-windows-x64.zip
+          Compress-Archive -Path "pkg-windows/*" `
+            -DestinationPath ${{ env.APP_NAME }}-windows-x64.zip -Force
       - uses: softprops/action-gh-release@v2
         if: github.event_name == 'release'
         with:
@@ -90,10 +112,21 @@ jobs:
         run: |
           flutter pub get
           flutter build linux --release
+      - name: Assemble package (app + backend + launcher)
+        run: |
+          rm -rf pkg-linux && mkdir -p pkg-linux
+          cp -r frontend/build/linux/x64/release/bundle/* pkg-linux/
+          mkdir -p pkg-linux/backend/data
+          cp -r backend/app pkg-linux/backend/
+          cp -r backend/scripts pkg-linux/backend/
+          cp backend/requirements.txt backend/.env.example pkg-linux/backend/
+          cp backend/data/*.json backend/data/*.geojson pkg-linux/backend/data/
+          cp launcher/start-backend.sh pkg-linux/
+          chmod +x pkg-linux/start-backend.sh
+          cp "launcher/使用說明.txt" pkg-linux/
       - name: Package
         run: |
-          tar -czf ${{ env.APP_NAME }}-linux-x64.tar.gz \
-            -C frontend/build/linux/x64/release/bundle .
+          tar -czf ${{ env.APP_NAME }}-linux-x64.tar.gz -C pkg-linux .
       - uses: softprops/action-gh-release@v2
         if: github.event_name == 'release'
         with:
@@ -117,10 +150,22 @@ jobs:
         run: |
           flutter pub get
           flutter build macos --release
-      - name: Zip .app
+      - name: Assemble package (app + backend + launcher)
         run: |
-          cd frontend/build/macos/Build/Products/Release
-          zip -r -y "$GITHUB_WORKSPACE/${{ env.APP_NAME }}-macos.zip" *.app
+          rm -rf pkg-macos && mkdir -p pkg-macos
+          cp -r frontend/build/macos/Build/Products/Release/*.app pkg-macos/
+          mkdir -p pkg-macos/backend/data
+          cp -r backend/app pkg-macos/backend/
+          cp -r backend/scripts pkg-macos/backend/
+          cp backend/requirements.txt backend/.env.example pkg-macos/backend/
+          cp backend/data/*.json backend/data/*.geojson pkg-macos/backend/data/
+          cp launcher/start-backend.sh launcher/start-backend.command pkg-macos/
+          chmod +x pkg-macos/start-backend.sh pkg-macos/start-backend.command
+          cp "launcher/使用說明.txt" pkg-macos/
+      - name: Zip
+        run: |
+          cd pkg-macos
+          zip -r -y "../${{ env.APP_NAME }}-macos.zip" .
       - uses: softprops/action-gh-release@v2
         if: github.event_name == 'release'
         with:
