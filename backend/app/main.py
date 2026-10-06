@@ -1,0 +1,69 @@
+"""FastAPI 進入點。
+
+啟動：  uvicorn app.main:app --reload --port 8000
+文件：  http://127.0.0.1:8000/docs
+"""
+
+from __future__ import annotations
+
+import logging
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from .api import intent as intent_api
+from .api import itinerary as itinerary_api
+from .api import poi as poi_api
+from .api import route as route_api
+from .api import transit as transit_api
+from .config import settings
+from .graph import multimodal
+from .graph.loader import get_graph, graph_info
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+log = logging.getLogger("smartnav")
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    # 暖機：啟動時先載入路網與多模態路網，避免第一次請求才臨時建圖。
+    # 若離線或下載失敗，不讓 API 崩潰，等第一次請求時再試。
+    try:
+        G = get_graph()
+        log.info("路網就緒：%d 節點 / %d 邊", G.number_of_nodes(), G.number_of_edges())
+    except Exception as exc:  # noqa: BLE001
+        log.warning("路網暖機失敗（可稍後重試）：%s", exc)
+    try:
+        H = multimodal.get_multimodal()
+        log.info("多模態路網就緒：%d 節點 / %d 邊", H.number_of_nodes(), H.number_of_edges())
+    except Exception as exc:  # noqa: BLE001
+        log.warning("多模態路網暖機失敗（可稍後重試）：%s", exc)
+    yield
+
+
+app = FastAPI(title=settings.app_name, version="0.1.0", lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(route_api.router, prefix=settings.api_prefix)
+app.include_router(poi_api.router, prefix=settings.api_prefix)
+app.include_router(itinerary_api.router, prefix=settings.api_prefix)
+app.include_router(transit_api.router, prefix=settings.api_prefix)
+app.include_router(intent_api.router, prefix=settings.api_prefix)
+
+
+@app.get("/health", tags=["meta"])
+def health() -> dict:
+    return {"ok": True, "app": settings.app_name, "version": "0.1.0"}
+
+
+@app.get(f"{settings.api_prefix}/meta", tags=["meta"])
+def meta() -> dict:
+    return graph_info()

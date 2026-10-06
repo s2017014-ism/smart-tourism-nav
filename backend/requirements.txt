@@ -1,0 +1,29 @@
+# ============================================================
+#  適應型智慧旅遊導航與路徑調配系統 — 後端依賴
+#
+#  ⚠️ 建議使用 Python 3.11 / 3.12。
+#     OSMnx / GeoPandas / Shapely / pyproj 等地理套件依賴 C 編譯的
+#     wheel，通常尚未支援最新版 Python。若安裝失敗，請改用 3.12。
+# ============================================================
+
+# ---- Phase 1：走路導航核心 ----
+fastapi>=0.115
+uvicorn[standard]>=0.30
+pydantic>=2.7
+pydantic-settings>=2.3
+python-dotenv>=1.0
+httpx>=0.27
+
+# ---- 地理空間 / 路網 ----
+osmnx>=2.0
+networkx>=3.3
+geopandas>=1.0
+shapely>=2.0
+numpy>=1.26
+# osmnx.distance.nearest_nodes 在「未投影圖」上需要 scikit-learn 做 ball tree
+scikit-learn>=1.5
+
+# ---- Phase 2+：需要時再解除註解 ----
+ortools>=9.10          # 多景點行程排序 (TTDP / OPTW)
+rasterio>=1.3         # DEM 高程、坡度計算（Phase 4）
+# openai>=1.40         # LLM 意圖解析（任何 OpenAI 相容 API 皆可）

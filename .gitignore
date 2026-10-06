@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+
+# Flutter / Dart
+.dart_tool/
+.packages
+build/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# OS
+Thumbs.db
+.DS_Store
+
+# 大型資料 / 快取
+backend/data/cache/*
+!backend/data/cache/.gitkeep
+backend/data/raw/*
+!backend/data/raw/.gitkeep
+
+# OSMnx Overpass 查詢快取
+/cache/
+/backend/cache/
