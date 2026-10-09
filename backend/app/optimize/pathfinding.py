@@ -12,6 +12,7 @@ Phase 3 會把這裡擴充成走 + 公車的多模態圖；Phase 4 會把 DEM �
 from __future__ import annotations
 
 import math
+import threading
 from typing import Any
 
 import networkx as nx
@@ -28,6 +29,57 @@ INF = math.inf
 def nearest_node(G: nx.MultiDiGraph, lat: float, lng: float) -> int:
     """找出最接近的圖節點。注意 OSMnx 的參數是 (X=經度, Y=緯度)。"""
     return int(ox.distance.nearest_nodes(G, X=lng, Y=lat))
+
+
+# ---------------------------------------------------------------------------
+#  連通性保護
+#  avoid_stairs 會把階梯邊整個移除，可能讓某些街區變成「有向圖中到不了」的
+#  小連通塊；若起／終點剛好吸附到這種孤立節點，A* 就會失敗（回傳「not
+#  reachable」）。解法：一律把端點吸附到「最大強連通分量」內的最近節點——
+#  分量內任兩點必有路可走，且實測偏移通常只有數十公尺。
+# ---------------------------------------------------------------------------
+_main_cache: dict[tuple[int, bool], frozenset] = {}
+_main_lock = threading.Lock()
+
+
+def largest_scc(D: nx.DiGraph) -> list:
+    """回傳圖中最大強連通分量的節點清單（空圖回傳空清單）。"""
+    if D.number_of_nodes() == 0:
+        return []
+    return list(max(nx.strongly_connected_components(D), key=len))
+
+
+def main_component(G: nx.MultiDiGraph, avoid_stairs: bool) -> frozenset:
+    """最大強連通分量。邊的拓樸只受 avoid_stairs 影響，故可依此快取。"""
+    key = (id(G), bool(avoid_stairs))
+    cached = _main_cache.get(key)
+    if cached is not None:
+        return cached
+
+    with _main_lock:
+        cached = _main_cache.get(key)
+        if cached is None:
+            D = build_cost_graph(G, RoutePreferences(avoid_stairs=bool(avoid_stairs)))
+            cached = frozenset(largest_scc(D))
+            _main_cache[key] = cached
+            try:
+                log = __import__("logging").getLogger(__name__)
+                log.info(
+                    "最大連通分量：avoid_stairs=%s → %d / %d 節點",
+                    bool(avoid_stairs), len(cached), G.number_of_nodes(),
+                )
+            except Exception:  # noqa: BLE001
+                pass
+        return cached
+
+
+def snap_node(
+    G: nx.MultiDiGraph, lat: float, lng: float, allowed: set | frozenset | None = None
+) -> int:
+    """吸附到最近節點；若給 allowed，只在該集合內找（保證端點落在主分量）。"""
+    if allowed:
+        return int(ox.distance.nearest_nodes(G.subgraph(allowed), X=lng, Y=lat))
+    return nearest_node(G, lat, lng)
 
 
 def _edge_cost(data: dict, prefs: RoutePreferences, speed: float) -> float:
@@ -124,8 +176,10 @@ def plan(
     prefs: RoutePreferences,
 ) -> dict:
     """回傳可直接轉成 RouteResponse 的 dict。"""
-    o_node = nearest_node(G, origin.lat, origin.lng)
-    d_node = nearest_node(G, destination.lat, destination.lng)
+    # 吸附到最大強連通分量，避免端點落在階梯封鎖後到不了的孤立區塊。
+    main = main_component(G, prefs.avoid_stairs)
+    o_node = snap_node(G, origin.lat, origin.lng, main)
+    d_node = snap_node(G, destination.lat, destination.lng, main)
 
     speed = prefs.walking_speed_mps or settings.walking_speed_mps
     D = build_cost_graph(G, prefs)
@@ -133,7 +187,12 @@ def plan(
     if o_node not in D or d_node not in D:
         raise nx.NetworkXNoPath("起點或終點在可用路網之外（可能被偏好條件完全封鎖）")
 
-    path = nx.astar_path(D, o_node, d_node, heuristic=_heuristic(G, d_node, speed), weight="cost")
+    try:
+        path = nx.astar_path(
+            D, o_node, d_node, heuristic=_heuristic(G, d_node, speed), weight="cost"
+        )
+    except nx.NetworkXNoPath as exc:
+        raise nx.NetworkXNoPath("找不到可通行的路線，請嘗試關閉無障礙或調整起點／終點") from exc
     return _assemble(G, D, path, speed)
 
 

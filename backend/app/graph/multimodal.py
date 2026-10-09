@@ -415,8 +415,10 @@ def plan(
 
     now_s = _parse_hhmm(departure_time) if departure_time else now_seconds()
     D = build_cost_graph(H, prefs, walk_speed, now_s)
-    o = pathfinding.nearest_node(G, origin.lat, origin.lng)
-    d = pathfinding.nearest_node(G, destination.lat, destination.lng)
+    # 吸附到步行圖最大強連通分量，避免階梯封鎖造成端點到不了。
+    main = pathfinding.main_component(G, prefs.avoid_stairs)
+    o = pathfinding.snap_node(G, origin.lat, origin.lng, main)
+    d = pathfinding.snap_node(G, destination.lat, destination.lng, main)
 
     if o not in D or d not in D:
         raise nx.NetworkXNoPath("起點或終點不在可用路網內")

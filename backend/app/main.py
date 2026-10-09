@@ -60,6 +60,18 @@ async def lifespan(_app: FastAPI):
             "LLM 未設定（將使用規則式解析）。請於 backend/.env 設定 "
             "STN_LLM_BASE_URL 與 STN_LLM_API_KEY，存檔後重新啟動後端。"
         )
+    try:
+        # 預先算好「有／無階梯封鎖」兩種最大連通分量，供端點吸附使用。
+        from .optimize import pathfinding
+
+        Gr = get_graph()
+        for flag in (False, True):
+            log.info(
+                "最大連通分量（avoid_stairs=%s）：%d 節點",
+                flag, len(pathfinding.main_component(Gr, flag)),
+            )
+    except Exception as exc:  # noqa: BLE001
+        log.warning("連通分量暖機失敗（可稍後重試）：%s", exc)
     yield
 
 

@@ -179,13 +179,14 @@ def solve(req: ItineraryRequest) -> dict:
     open_route = not req.round_trip and req.end is None
     end_point = req.start if req.round_trip else req.end
 
-    # 圖節點
-    start_g = pathfinding.nearest_node(G, req.start.lat, req.start.lng)
+    # 圖節點（吸附到最大強連通分量，避免階梯封鎖使景點到不了而整趟失敗）
+    main = pathfinding.main_component(G, prefs.avoid_stairs)
+    start_g = pathfinding.snap_node(G, req.start.lat, req.start.lng, main)
     graph_nodes: list[int] = [start_g] + [
-        pathfinding.nearest_node(G, c["lat"], c["lng"]) for c in candidates
+        pathfinding.snap_node(G, c["lat"], c["lng"], main) for c in candidates
     ]
     if not open_route:
-        graph_nodes.append(pathfinding.nearest_node(G, end_point.lat, end_point.lng))
+        graph_nodes.append(pathfinding.snap_node(G, end_point.lat, end_point.lng, main))
 
     # 旅行時間矩陣（單源最短路 × 唯一節點數）
     D = pathfinding.build_cost_graph(G, prefs)
