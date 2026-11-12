@@ -2,10 +2,13 @@
     <!-- 定位權限（geolocator） -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- 網路權限：release APK 必須在 main manifest 宣告，否則完全無法連後端 -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <application
         android:label="smart_tourism_nav"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:usesCleartextTraffic="true">
         <activity
             android:name=".MainActivity"
             android:exported="true"

@@ -15,4 +15,4 @@ Get-Process python |
 Start-Sleep -Milliseconds 500
 
 Write-Host "啟動後端 http://127.0.0.1:8000 ..."
-.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000
+.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000

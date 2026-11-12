@@ -78,7 +78,118 @@ class _MapScreenState extends State<MapScreen> {
   Future<void> _checkBackend() async {
     final ok = await _api.health();
     if (!mounted) return;
-    if (!ok) _snack('無法連線後端（$apiBaseUrl）。請先啟動 FastAPI 服務。');
+    if (!ok) {
+      _snack('無法連線後端（$apiBaseUrl）。請啟動 FastAPI，或到右上角設定後端位址。');
+    }
+  }
+
+  /// 讓使用者設定後端位址（APK 安裝在手機時必用：改填電腦的區網 IP）。
+  Future<void> _openServerSettings() async {
+    final ctrl = TextEditingController(text: apiBaseUrl);
+    String? message;
+    bool ok = false;
+    bool testing = false;
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSt) {
+          return AlertDialog(
+            title: const Text('後端伺服器設定'),
+            content: SizedBox(
+              width: 380,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    '手機與電腦需在同一個 Wi-Fi。請填入手機可連到的電腦區網 IP，'
+                    '例如 http://192.168.1.20:8000；iOS／桌面／Web 可用 127.0.0.1。',
+                    style: TextStyle(fontSize: 13),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: ctrl,
+                    keyboardType: TextInputType.url,
+                    autocorrect: false,
+                    decoration: const InputDecoration(
+                      labelText: 'API 位址',
+                      hintText: 'http://192.168.1.20:8000',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  if (message != null) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      message!,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: ok ? Colors.green.shade700 : Colors.red.shade700,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  ctrl.text = defaultApiBaseUrl;
+                  setSt(() {
+                    message = null;
+                    ok = false;
+                  });
+                },
+                child: const Text('還原預設'),
+              ),
+              TextButton(
+                onPressed: testing
+                    ? null
+                    : () async {
+                        final target = normalizeBaseUrl(ctrl.text);
+                        if (target.isEmpty) return;
+                        setSt(() {
+                          testing = true;
+                          message = null;
+                        });
+                        final good = await _api.health(baseUrl: target);
+                        if (!ctx.mounted) return;
+                        setSt(() {
+                          testing = false;
+                          ok = good;
+                          message = good
+                              ? '連線成功：$target'
+                              : '連線失敗。請確認後端已啟動、IP 正確、同一 Wi-Fi，且防火牆已開放 8000。';
+                        });
+                      },
+                child: testing
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('測試連線'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                onPressed: () async {
+                  await setApiBaseUrl(ctrl.text);
+                  if (!ctx.mounted) return;
+                  Navigator.pop(ctx);
+                  _snack('已儲存後端位址：$apiBaseUrl');
+                  _checkBackend();
+                },
+                child: const Text('儲存'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    ctrl.dispose();
   }
 
   void _onTap(TapPosition _, LatLng point) {
@@ -467,6 +578,11 @@ class _MapScreenState extends State<MapScreen> {
                   onPressed: () => Navigator.of(context).push(
                     MaterialPageRoute(builder: (_) => const SavedItinerariesScreen()),
                   ),
+                ),
+                IconButton(
+                  tooltip: '後端伺服器設定',
+                  icon: const Icon(Icons.settings_ethernet),
+                  onPressed: _openServerSettings,
                 ),
                 IconButton(onPressed: _clear, icon: const Icon(Icons.delete_outline), tooltip: '清除'),
               ],

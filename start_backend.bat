@@ -1,9 +1,9 @@
 @echo off
-title ¾AÀ³«¬´¼¼z®È¹C¾É¯è - «áºÝ Backend
+title ï¿½Aï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½zï¿½È¹Cï¿½É¯ï¿½ - ï¿½ï¿½ï¿½ Backend
 cd /d "%~dp0backend"
 
 if not exist ".venv\Scripts\activate.bat" (
-    echo [¿ù»~] §ä¤£¨ìµêÀÀÀô¹Ò .venv, ½Ð¥ý¨Ì README «Ø¥ßÀô¹Ò¡C
+    echo [ï¿½ï¿½ï¿½~] ï¿½ä¤£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ .venv, ï¿½Ð¥ï¿½ï¿½ï¿½ README ï¿½Ø¥ï¿½ï¿½ï¿½ï¿½Ò¡C
     echo   python -m venv .venv
     echo   .\.venv\Scripts\Activate.ps1
     echo   pip install -r requirements.txt
@@ -14,15 +14,15 @@ if not exist ".venv\Scripts\activate.bat" (
 call ".venv\Scripts\activate.bat"
 
 echo ==================================================
-echo   ¾AÀ³«¬´¼¼z®È¹C¾É¯è»P¸ô®|½Õ°t¨t²Î - «áºÝ
-echo   API ¤å¥ó : http://127.0.0.1:8000/docs
-echo   °·±dÀË¬d : http://127.0.0.1:8000/health
-echo   °±¤îªA°È : «ö Ctrl + C
+echo   ï¿½Aï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½zï¿½È¹Cï¿½É¯ï¿½Pï¿½ï¿½ï¿½|ï¿½Õ°tï¿½tï¿½ï¿½ - ï¿½ï¿½ï¿½
+echo   API ï¿½ï¿½ï¿½ : http://127.0.0.1:8000/docs
+echo   ï¿½ï¿½ï¿½dï¿½Ë¬d : http://127.0.0.1:8000/health
+echo   ï¿½ï¿½ï¿½ï¿½Aï¿½ï¿½ : ï¿½ï¿½ Ctrl + C
 echo ==================================================
 echo.
 
-uvicorn app.main:app --reload --port 8000
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 echo.
-echo [«áºÝ¤w°±¤î]
+echo [ï¿½ï¿½Ý¤wï¿½ï¿½ï¿½ï¿½]
 pause

@@ -27,8 +27,9 @@ fi
 
 [ -f "$BACKEND/.env" ] || cp "$BACKEND/.env.example" "$BACKEND/.env"
 
-echo "[3/3] Starting backend at http://127.0.0.1:8000"
+echo "[3/3] Starting backend at http://0.0.0.0:8000  (LAN IP also works)"
 echo "      Keep this window OPEN while using the app. Press Ctrl+C to stop."
+echo "      On the phone, set the server address to this PC's LAN IP."
 echo
 cd "$BACKEND"
-exec "$PY" -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+exec "$PY" -m uvicorn app.main:app --host 0.0.0.0 --port 8000

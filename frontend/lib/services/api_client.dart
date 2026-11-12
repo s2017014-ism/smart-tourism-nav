@@ -157,10 +157,10 @@ class ApiClient {
     return Weather.fromJson(jsonDecode(utf8.decode(resp.bodyBytes)) as Map<String, dynamic>);
   }
 
-  Future<bool> health() async {
+  Future<bool> health({String? baseUrl}) async {
     try {
       final resp = await _client
-          .get(Uri.parse('$apiBaseUrl/health'))
+          .get(Uri.parse('${baseUrl ?? apiBaseUrl}/health'))
           .timeout(const Duration(seconds: 3));
       return resp.statusCode == 200;
     } catch (_) {

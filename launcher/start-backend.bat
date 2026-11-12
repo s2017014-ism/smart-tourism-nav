@@ -38,11 +38,12 @@ if not exist "%PY%" (
 
 if not exist "%BACKEND%\.env" copy /Y "%BACKEND%\.env.example" "%BACKEND%\.env" >nul
 
-echo [3/3] Starting backend at http://127.0.0.1:8000
+echo [3/3] Starting backend at http://0.0.0.0:8000  (LAN IP also works)
 echo       Keep this window OPEN while using the app. Press Ctrl+C to stop.
+echo       On the phone, set the server address to this PC's LAN IP.
 echo.
 pushd "%BACKEND%"
-"%PY%" -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+"%PY%" -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 popd
 echo.
 echo Backend stopped.
