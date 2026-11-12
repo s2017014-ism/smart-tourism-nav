@@ -28,11 +28,13 @@ String normalizeBaseUrl(String input) {
 String get defaultApiBaseUrl {
   if (_defineBase.isNotEmpty) return normalizeBaseUrl(_defineBase);
   if (kIsWeb) {
-    // 網頁版由後端同源供應時，API 也使用相同 origin：
-    // 不論是 localhost 還是區網 IP（手機瀏覽器）都能直接運作。
+    // 網頁版可能由兩種方式提供：
+    //   1) 後端同源供應（連接埠 8000）→ API 也是 8000。
+    //   2) Flutter dev server（隨機埠，例如 61216）→ API 仍在同主機的 8000。
+    // 因此一律指向「目前頁面主機的 8000 埠」，兩種情況都正確。
     try {
-      final origin = Uri.base.origin;
-      if (origin.isNotEmpty && origin != 'null') return origin;
+      final host = Uri.base.host;
+      if (host.isNotEmpty) return 'http://$host:8000';
     } catch (_) {
       // file:// 等情況退回預設值
     }
