@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_compass/flutter_compass.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
@@ -54,7 +55,10 @@ class _MapScreenState extends State<MapScreen> {
 
   // ---- 即時導航 ----
   StreamSubscription<Position>? _positionSub;
+  StreamSubscription<CompassEvent>? _compassSub;
+  double? _heading; // 面向角度（0=北，順時針 0–360）
   bool _navigating = false;
+  bool _followUser = true; // 地圖是否持續跟隨 GPS
   bool _deviationPrompted = false;
   bool _offRouteDialogShowing = false;
   static const double _offRouteThresholdM = 60;
@@ -74,6 +78,7 @@ class _MapScreenState extends State<MapScreen> {
   @override
   void dispose() {
     _positionSub?.cancel();
+    _compassSub?.cancel();
     super.dispose();
   }
 
@@ -475,8 +480,10 @@ class _MapScreenState extends State<MapScreen> {
     await _positionSub?.cancel();
     setState(() {
       _navigating = true;
+      _followUser = true;
       _deviationPrompted = false;
     });
+    _startCompass();
     _positionSub = Geolocator.getPositionStream(
       locationSettings: const LocationSettings(
         accuracy: LocationAccuracy.high,
@@ -486,8 +493,16 @@ class _MapScreenState extends State<MapScreen> {
       if (!mounted) return;
       final p = LatLng(pos.latitude, pos.longitude);
       final first = _myLocation == null;
-      setState(() => _myLocation = p);
-      if (first) _mapController.move(p, 17);
+      setState(() {
+        _myLocation = p;
+        // 沒有羅盤（例如 Web）時，用 GPS 移動方向作為箭頭方向。
+        if (_heading == null && pos.heading >= 0 && !pos.heading.isNaN) {
+          _heading = pos.heading;
+        }
+      });
+      if (_followUser) {
+        _mapController.move(p, first ? 17 : _mapController.camera.zoom);
+      }
       _checkDeviation(p);
     }, onError: (e) {
       if (!mounted) return;
@@ -500,12 +515,42 @@ class _MapScreenState extends State<MapScreen> {
   void _stopNavigation() {
     _positionSub?.cancel();
     _positionSub = null;
+    _stopCompass();
     if (!mounted) return;
     setState(() {
       _navigating = false;
+      _followUser = true;
       _deviationPrompted = false;
     });
     _snack('已停止導航');
+  }
+
+  void _recenter() {
+    final me = _myLocation;
+    if (me == null) return;
+    _mapController.move(me, 17);
+    setState(() => _followUser = true);
+  }
+
+  void _startCompass() {
+    _compassSub?.cancel();
+    try {
+      final events = FlutterCompass.events;
+      if (events == null) return; // 平台不支援羅盤
+      _compassSub = events.listen((e) {
+        final h = e.heading;
+        if (h != null && !h.isNaN && mounted) {
+          setState(() => _heading = h);
+        }
+      }, onError: (_) {});
+    } catch (_) {
+      // 羅盤不可用時忽略，改用 GPS 移動方向。
+    }
+  }
+
+  void _stopCompass() {
+    _compassSub?.cancel();
+    _compassSub = null;
   }
 
   void _checkDeviation(LatLng p) {
@@ -633,16 +678,21 @@ class _MapScreenState extends State<MapScreen> {
     }
 
     if (_myLocation != null) {
+      final heading = _heading ?? 0.0;
       markers.add(Marker(
         point: _myLocation!,
-        width: 22,
-        height: 22,
-        child: Container(
-          decoration: BoxDecoration(
-            color: Colors.blue,
-            shape: BoxShape.circle,
-            border: Border.all(color: Colors.white, width: 3),
-            boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 4)],
+        width: 36,
+        height: 36,
+        child: Transform.rotate(
+          angle: heading * math.pi / 180,
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.blue,
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white, width: 3),
+              boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 4)],
+            ),
+            child: const Icon(Icons.navigation, color: Colors.white, size: 20),
           ),
         ),
       ));
@@ -753,6 +803,12 @@ class _MapScreenState extends State<MapScreen> {
               minZoom: 11,
               maxZoom: 19,
               onTap: _onTap,
+              onPositionChanged: (camera, hasGesture) {
+                // 使用者手動拖動地圖時暫停跟隨，避免一直被拉回去。
+                if (hasGesture && _navigating && _followUser) {
+                  setState(() => _followUser = false);
+                }
+              },
             ),
             children: [
               TileLayer(
@@ -974,17 +1030,23 @@ class _MapScreenState extends State<MapScreen> {
                           ),
                   ),
                   if (_navigating)
-                    const Padding(
-                      padding: EdgeInsets.only(top: 4),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
                       child: Row(
                         children: [
-                          Icon(Icons.gps_fixed, size: 14, color: Colors.green),
-                          SizedBox(width: 4),
+                          const Icon(Icons.gps_fixed, size: 14, color: Colors.green),
+                          const SizedBox(width: 4),
                           Expanded(
                             child: Text(
-                              '即時導航中：偏離路線時會詢問是否重新規劃',
-                              style: TextStyle(fontSize: 11, color: Colors.green),
+                              _followUser
+                                  ? '即時導航中：地圖跟隨 GPS，偏離時會詢問是否重規劃'
+                                  : '已暫停跟隨，按「置中」恢復',
+                              style: const TextStyle(fontSize: 11, color: Colors.green),
                             ),
+                          ),
+                          TextButton(
+                            onPressed: _recenter,
+                            child: const Text('置中', style: TextStyle(fontSize: 12)),
                           ),
                         ],
                       ),
