@@ -180,3 +180,58 @@ jobs:
         with:
           name: macos-zip
           path: ${{ env.APP_NAME }}-macos.zip
+
+  web:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: Build Web
+        working-directory: frontend
+        run: |
+          flutter pub get
+          flutter build web --release
+      - name: Assemble package (web + backend + launcher)
+        shell: pwsh
+        run: |
+          $pkg = "pkg-web"
+          if (Test-Path $pkg) { Remove-Item -Recurse -Force $pkg }
+          New-Item -ItemType Directory -Force "$pkg/backend/data" | Out-Null
+          Copy-Item -Recurse "backend/app" "$pkg/backend/"
+          Copy-Item -Recurse "backend/scripts" "$pkg/backend/"
+          Copy-Item "backend/requirements.txt" "$pkg/backend/"
+          Copy-Item "backend/.env.example" "$pkg/backend/"
+          Copy-Item "backend/data/*.json" "$pkg/backend/data/"
+          Copy-Item "backend/data/*.geojson" "$pkg/backend/data/"
+          New-Item -ItemType Directory -Force "$pkg/backend/data/cache" | Out-Null
+          Copy-Item "backend/data/cache/*.graphml" "$pkg/backend/data/cache/" -ErrorAction SilentlyContinue
+          # Flutter Web 建置產物由後端同源供應
+          New-Item -ItemType Directory -Force "$pkg/backend/app/web" | Out-Null
+          Copy-Item -Recurse "frontend/build/web/*" "$pkg/backend/app/web/"
+          Copy-Item "launcher/start-web.bat" $pkg
+          Copy-Item "launcher/start-backend.bat" $pkg
+          Copy-Item "launcher/使用說明_Web.txt" $pkg
+          Copy-Item "launcher/使用說明.txt" $pkg
+          # 確保 .bat 為 CRLF（cmd 需要）
+          foreach ($b in @("start-web.bat", "start-backend.bat")) {
+            $bat = Join-Path $pkg $b
+            $c = ([IO.File]::ReadAllText($bat) -replace "`r`n", "`n") -replace "`n", "`r`n"
+            [IO.File]::WriteAllText($bat, $c, [Text.Encoding]::ASCII)
+          }
+      - name: Zip
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "pkg-web/*" `
+            -DestinationPath ${{ env.APP_NAME }}-web.zip -Force
+      - uses: softprops/action-gh-release@v2
+        if: github.event_name == 'release'
+        with:
+          files: ${{ env.APP_NAME }}-web.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-zip
+          path: ${{ env.APP_NAME }}-web.zip

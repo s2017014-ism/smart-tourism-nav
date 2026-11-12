@@ -27,7 +27,17 @@ String normalizeBaseUrl(String input) {
 /// * iOS 模擬器 / 桌面 / Web：`127.0.0.1`。
 String get defaultApiBaseUrl {
   if (_defineBase.isNotEmpty) return normalizeBaseUrl(_defineBase);
-  if (kIsWeb) return 'http://127.0.0.1:8000';
+  if (kIsWeb) {
+    // 網頁版由後端同源供應時，API 也使用相同 origin：
+    // 不論是 localhost 還是區網 IP（手機瀏覽器）都能直接運作。
+    try {
+      final origin = Uri.base.origin;
+      if (origin.isNotEmpty && origin != 'null') return origin;
+    } catch (_) {
+      // file:// 等情況退回預設值
+    }
+    return 'http://127.0.0.1:8000';
+  }
   if (defaultTargetPlatform == TargetPlatform.android) {
     return 'http://10.0.2.2:8000';
   }

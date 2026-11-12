@@ -116,6 +116,23 @@ App 操作：
   在地圖上畫出藍色（步行）／紫色（公車）路線。
 * 右上角 ✨ 進入「智慧行程規劃」、🔖 進入「我的行程」。
 
+### 網頁版（瀏覽器）
+
+前端也可建置成靜態網站，**由後端同源供應**（同一個 8000 埠），不需要額外伺服器：
+
+```powershell
+cd frontend
+flutter build web --release
+Remove-Item ..\backend\app\web -Recurse -Force -ErrorAction SilentlyContinue
+Copy-Item -Recurse build\web ..\backend\app\web
+```
+
+啟動後端後，開 <http://127.0.0.1:8000/> 即可使用；手機與電腦同 Wi-Fi 時，
+開 `http://<電腦區網IP>:8000/` 也能使用（API 同源，無 CORS／混合內容問題）。
+
+> Release 的 `smart-tourism-nav-web.zip` 已內含建置好的網頁版與啟動腳本，
+> 解壓後雙擊 `start-web.bat`（Windows）或執行 `./start-web.sh` 即可。
+
 ---
 
 ## API 合約（Phase 1）

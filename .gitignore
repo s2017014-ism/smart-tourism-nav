@@ -29,3 +29,6 @@ backend/data/raw/*
 # OSMnx Overpass 查詢快取
 /cache/
 /backend/cache/
+
+# Flutter Web 建置產物（由後端同源供應；不納入版控）
+backend/app/web/

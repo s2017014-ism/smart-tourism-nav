@@ -8,9 +8,11 @@ from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from .api import intent as intent_api
 from .api import itinerary as itinerary_api
@@ -101,3 +103,14 @@ def health() -> dict:
 @app.get(f"{settings.api_prefix}/meta", tags=["meta"])
 def meta() -> dict:
     return graph_info()
+
+
+# ------------------------------------------------------------------
+#  網頁版：若 backend/app/web 內有 Flutter Web 建置產物，就由後端同源供應。
+#  開 http://<主機>:8000/ 即可使用；API 同源，沒有 CORS／混合內容問題。
+#  （此資料夾是建置產物，不納入版控；由 release workflow 或本機建置產生。）
+# ------------------------------------------------------------------
+_web_dir = Path(__file__).resolve().parent / "web"
+if (_web_dir / "index.html").exists():
+    app.mount("/", StaticFiles(directory=str(_web_dir), html=True), name="web")
+    log.info("已掛載網頁版：%s", _web_dir)
