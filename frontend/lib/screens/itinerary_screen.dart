@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../config.dart';
@@ -38,6 +39,8 @@ class _ItineraryScreenState extends State<ItineraryScreen> {
   final ItineraryStore _store = ItineraryStore();
 
   LatLng _start = const LatLng(22.19356, 113.53963); // 議事亭前地
+  String? _startName; // 以名稱選擇起點時顯示
+  bool _locating = false;
   String _departure = '09:00';
   double _duration = 6;
   final Set<String> _cats = {'tourism', 'historic', 'natural', 'curated'};
@@ -55,6 +58,7 @@ class _ItineraryScreenState extends State<ItineraryScreen> {
   bool _nlLoading = false;
   String? _nlSummary;
   String? _nlSource;
+  bool _panelHidden = false; // 是否收起下方設定面板
 
   static const Map<String, String> _catLabels = {
     'tourism': '觀光',
@@ -223,8 +227,48 @@ class _ItineraryScreenState extends State<ItineraryScreen> {
   void _onTap(TapPosition _, LatLng point) {
     setState(() {
       _start = point;
+      _startName = null;
       _plan = null;
     });
+  }
+
+  Future<LatLng> _determinePosition() async {
+    if (!await Geolocator.isLocationServiceEnabled()) {
+      throw Exception('定位服務未開啟');
+    }
+    var permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+    if (permission == LocationPermission.denied) {
+      throw Exception('已拒絕定位權限');
+    }
+    if (permission == LocationPermission.deniedForever) {
+      throw Exception('定位權限已被永久拒絕，請至系統設定開啟');
+    }
+    final pos = await Geolocator.getCurrentPosition(
+      locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+    );
+    return LatLng(pos.latitude, pos.longitude);
+  }
+
+  Future<void> _useMyLocation() async {
+    setState(() => _locating = true);
+    try {
+      final p = await _determinePosition();
+      if (!mounted) return;
+      setState(() {
+        _start = p;
+        _startName = '我的位置';
+        _plan = null;
+        _locating = false;
+      });
+      _snack('已將我的位置設為起點');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _locating = false);
+      _snack('$e'.replaceFirst('Exception: ', ''));
+    }
   }
 
   void _showStops() {
@@ -392,6 +436,7 @@ class _ItineraryScreenState extends State<ItineraryScreen> {
                                 onTap: () {
                                   setState(() {
                                     _start = p.point;
+                                    _startName = p.name;
                                     _plan = null;
                                   });
                                   Navigator.pop(ctx);
@@ -529,6 +574,7 @@ class _ItineraryScreenState extends State<ItineraryScreen> {
             onPressed: () => setState(() {
               _plan = null;
               _start = const LatLng(22.19356, 113.53963);
+              _startName = null;
             }),
           ),
         ],
@@ -577,7 +623,20 @@ class _ItineraryScreenState extends State<ItineraryScreen> {
                 ),
               ),
             ),
-          _buildPanel(),
+          if (_panelHidden)
+            Positioned(
+              bottom: 12,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: _circleButton(
+                  Icons.keyboard_arrow_up,
+                  '展開下方介面',
+                  () => setState(() => _panelHidden = false),
+                ),
+              ),
+            ),
+          if (!_panelHidden) _buildPanel(),
         ],
       ),
     );
@@ -605,6 +664,15 @@ class _ItineraryScreenState extends State<ItineraryScreen> {
     return markers;
   }
 
+  Widget _circleButton(IconData icon, String tip, VoidCallback onTap) {
+    return Material(
+      color: Colors.white,
+      shape: const CircleBorder(),
+      elevation: 3,
+      child: IconButton(tooltip: tip, icon: Icon(icon), onPressed: onTap),
+    );
+  }
+
   Widget _buildPanel() {
     final plan = _plan;
     final maxH = MediaQuery.of(context).size.height * 0.56;
@@ -623,6 +691,22 @@ class _ItineraryScreenState extends State<ItineraryScreen> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        '行程設定',
+                        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: '收起下方介面',
+                      visualDensity: VisualDensity.compact,
+                      icon: const Icon(Icons.keyboard_arrow_down),
+                      onPressed: () => setState(() => _panelHidden = true),
+                    ),
+                  ],
+                ),
                 Row(
                   children: [
                     Expanded(
@@ -654,8 +738,38 @@ class _ItineraryScreenState extends State<ItineraryScreen> {
                         style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
                   ),
                 const Divider(),
-                Text('起點：${_start.latitude.toStringAsFixed(4)}, ${_start.longitude.toStringAsFixed(4)}　（點地圖可改）',
-                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                Text(
+                  _startName == null
+                      ? '起點：${_start.latitude.toStringAsFixed(4)}, ${_start.longitude.toStringAsFixed(4)}（點地圖可改）'
+                      : '起點：$_startName（${_start.latitude.toStringAsFixed(4)}, ${_start.longitude.toStringAsFixed(4)}）',
+                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _openSearch,
+                        icon: const Icon(Icons.search, size: 18),
+                        label: const Text('選擇起點', style: TextStyle(fontSize: 12)),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _locating ? null : _useMyLocation,
+                        icon: _locating
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.my_location, size: 18),
+                        label: const Text('我的位置', style: TextStyle(fontSize: 12)),
+                      ),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 8),
                 Row(
                   children: [
