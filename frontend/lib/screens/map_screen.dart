@@ -1040,13 +1040,13 @@ class _MapScreenState extends State<MapScreen> {
                             child: Text(
                               _followUser
                                   ? '即時導航中：地圖跟隨 GPS，偏離時會詢問是否重規劃'
-                                  : '已暫停跟隨，按「置中」恢復',
+                                  : '已暫停跟隨，按「我的位置」恢復',
                               style: const TextStyle(fontSize: 11, color: Colors.green),
                             ),
                           ),
                           TextButton(
                             onPressed: _recenter,
-                            child: const Text('置中', style: TextStyle(fontSize: 12)),
+                            child: const Text('我的位置', style: TextStyle(fontSize: 12)),
                           ),
                         ],
                       ),
