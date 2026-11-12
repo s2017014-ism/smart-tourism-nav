@@ -44,7 +44,6 @@ class _ItineraryScreenState extends State<ItineraryScreen> {
   String _departure = '09:00';
   double _duration = 6;
   final Set<String> _cats = {'tourism', 'historic', 'natural', 'curated'};
-  final TextEditingController _mustCtrl = TextEditingController();
   int _maxFood = 2;
 
   ItineraryPlan? _plan;
@@ -111,7 +110,6 @@ class _ItineraryScreenState extends State<ItineraryScreen> {
           ..clear()
           ..addAll(cats.map((e) => e.toString()));
       }
-      _mustCtrl.text = s['must_visit'] as String? ?? '';
       _maxFood = (s['max_food_stops'] as num?)?.toInt() ?? _maxFood;
       _accessible = (s['avoid_stairs'] == true) || (s['max_slope_pct'] != null);
     }
@@ -125,7 +123,6 @@ class _ItineraryScreenState extends State<ItineraryScreen> {
 
   @override
   void dispose() {
-    _mustCtrl.dispose();
     _nlCtrl.dispose();
     super.dispose();
   }
@@ -184,17 +181,11 @@ class _ItineraryScreenState extends State<ItineraryScreen> {
     }
     setState(() => _loading = true);
     try {
-      final must = _mustCtrl.text
-          .split(RegExp(r'[,，\s]+'))
-          .map((s) => s.trim())
-          .where((s) => s.isNotEmpty)
-          .toList();
       final plan = await _api.fetchItinerary(
         start: _start,
         departureTime: _departure,
         durationHours: _duration,
         categories: _cats.toList(),
-        mustVisit: must,
         maxFoodStops: _maxFood,
         avoidStairs: _accessible,
         maxSlopePct: _accessible ? 12 : null,
@@ -442,17 +433,6 @@ class _ItineraryScreenState extends State<ItineraryScreen> {
                                   Navigator.pop(ctx);
                                   _snack('已將「${p.name}」設為起點');
                                 },
-                                trailing: IconButton(
-                                  tooltip: '加入必訪',
-                                  icon: const Icon(Icons.star_border),
-                                  onPressed: () {
-                                    final cur = _mustCtrl.text.trim();
-                                    if (!cur.contains(p.name)) {
-                                      _mustCtrl.text = cur.isEmpty ? p.name : '$cur, ${p.name}';
-                                    }
-                                    _snack('已加入必訪：${p.name}');
-                                  },
-                                ),
                               );
                             },
                           ),
@@ -497,7 +477,6 @@ class _ItineraryScreenState extends State<ItineraryScreen> {
       'departure_time': _departure,
       'duration_hours': _duration,
       'categories': _cats.toList(),
-      'must_visit': _mustCtrl.text,
       'max_food_stops': _maxFood,
       'avoid_stairs': _accessible,
       'max_slope_pct': _accessible ? 12 : null,
@@ -772,83 +751,100 @@ class _ItineraryScreenState extends State<ItineraryScreen> {
                 ),
                 const SizedBox(height: 8),
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    OutlinedButton.icon(
-                      onPressed: _pickTime,
-                      icon: const Icon(Icons.access_time, size: 18),
-                      label: Text('出發 $_departure'),
-                    ),
-                    const SizedBox(width: 12),
+                    // 左：出發時間 + 時長
                     Expanded(
-                      child: Text('行程 ${_duration.round()} 小時', style: const TextStyle(fontWeight: FontWeight.w600)),
-                    ),
-                  ],
-                ),
-                Slider(
-                  value: _duration,
-                  min: 2,
-                  max: 12,
-                  divisions: 10,
-                  label: '${_duration.round()} 小時',
-                  onChanged: (v) => setState(() => _duration = v),
-                ),
-                const Text('包含類別', style: TextStyle(fontWeight: FontWeight.w600)),
-                const SizedBox(height: 4),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: -4,
-                  children: _catLabels.entries.map((e) {
-                    final selected = _cats.contains(e.key);
-                    return FilterChip(
-                      label: Text(e.value),
-                      selected: selected,
-                      onSelected: (v) => setState(() {
-                        if (v) {
-                          _cats.add(e.key);
-                        } else {
-                          _cats.remove(e.key);
-                        }
-                      }),
-                    );
-                  }).toList(),
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _mustCtrl,
-                        decoration: const InputDecoration(
-                          isDense: true,
-                          labelText: '必訪景點（逗號分隔，可留空）',
-                          hintText: '大三巴, 媽閣廟',
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    if (_cats.contains('food'))
-                      Row(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text('美食上限'),
-                          IconButton(
-                            icon: const Icon(Icons.remove_circle_outline),
-                            onPressed: _maxFood > 0 ? () => setState(() => _maxFood--) : null,
+                          OutlinedButton.icon(
+                            onPressed: _pickTime,
+                            icon: const Icon(Icons.access_time, size: 18),
+                            label: Text('出發 $_departure'),
                           ),
-                          Text('$_maxFood'),
-                          IconButton(
-                            icon: const Icon(Icons.add_circle_outline),
-                            onPressed: _maxFood < 6 ? () => setState(() => _maxFood++) : null,
+                          const SizedBox(height: 6),
+                          Text(
+                            '行程 ${_duration.round()} 小時',
+                            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                          ),
+                          Slider(
+                            value: _duration,
+                            min: 2,
+                            max: 12,
+                            divisions: 10,
+                            label: '${_duration.round()} 小時',
+                            onChanged: (v) => setState(() => _duration = v),
                           ),
                         ],
                       ),
+                    ),
+                    const SizedBox(width: 12),
+                    // 右：類別 + 無障礙
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            '包含類別',
+                            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                          ),
+                          const SizedBox(height: 2),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: -4,
+                            children: _catLabels.entries.map((e) {
+                              final selected = _cats.contains(e.key);
+                              return FilterChip(
+                                label: Text(e.value, style: const TextStyle(fontSize: 12)),
+                                selected: selected,
+                                onSelected: (v) => setState(() {
+                                  if (v) {
+                                    _cats.add(e.key);
+                                  } else {
+                                    _cats.remove(e.key);
+                                  }
+                                }),
+                              );
+                            }).toList(),
+                          ),
+                          if (_cats.contains('food'))
+                            Row(
+                              children: [
+                                const Text('美食上限', style: TextStyle(fontSize: 12)),
+                                IconButton(
+                                  visualDensity: VisualDensity.compact,
+                                  icon: const Icon(Icons.remove_circle_outline, size: 18),
+                                  onPressed:
+                                      _maxFood > 0 ? () => setState(() => _maxFood--) : null,
+                                ),
+                                Text('$_maxFood', style: const TextStyle(fontSize: 12)),
+                                IconButton(
+                                  visualDensity: VisualDensity.compact,
+                                  icon: const Icon(Icons.add_circle_outline, size: 18),
+                                  onPressed:
+                                      _maxFood < 6 ? () => setState(() => _maxFood++) : null,
+                                ),
+                              ],
+                            ),
+                          Row(
+                            children: [
+                              const Expanded(
+                                child: Text(
+                                  '無障礙路線',
+                                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                                ),
+                              ),
+                              Switch(
+                                value: _accessible,
+                                onChanged: (v) => setState(() => _accessible = v),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
                   ],
-                ),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  dense: true,
-                  title: const Text('無障礙路線（避開階梯與陡坡）', style: TextStyle(fontSize: 13)),
-                  value: _accessible,
-                  onChanged: (v) => setState(() => _accessible = v),
                 ),
                 const SizedBox(height: 8),
                 if (plan != null) ...[

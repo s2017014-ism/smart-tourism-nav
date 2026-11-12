@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
@@ -49,6 +52,13 @@ class _MapScreenState extends State<MapScreen> {
   bool _poisLoaded = false;
   bool _locating = false;
 
+  // ---- 即時導航 ----
+  StreamSubscription<Position>? _positionSub;
+  bool _navigating = false;
+  bool _deviationPrompted = false;
+  bool _offRouteDialogShowing = false;
+  static const double _offRouteThresholdM = 60;
+
   @override
   void initState() {
     super.initState();
@@ -59,6 +69,12 @@ class _MapScreenState extends State<MapScreen> {
     if (_origin != null && _destination != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _planRoute());
     }
+  }
+
+  @override
+  void dispose() {
+    _positionSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadWeather() async {
@@ -396,7 +412,7 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   // ---- 使用目前位置 ----
-  Future<LatLng> _determinePosition() async {
+  Future<void> _ensureLocationPermission() async {
     if (!await Geolocator.isLocationServiceEnabled()) {
       throw Exception('定位服務未開啟');
     }
@@ -410,6 +426,10 @@ class _MapScreenState extends State<MapScreen> {
     if (permission == LocationPermission.deniedForever) {
       throw Exception('定位權限已被永久拒絕，請至系統設定開啟');
     }
+  }
+
+  Future<LatLng> _determinePosition() async {
+    await _ensureLocationPermission();
     final pos = await Geolocator.getCurrentPosition(
       locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
     );
@@ -432,6 +452,142 @@ class _MapScreenState extends State<MapScreen> {
       setState(() => _locating = false);
       _snack('$e'.replaceFirst('Exception: ', ''));
     }
+  }
+
+  // ---- 即時導航 ----
+  List<LatLng> _currentRoutePoints() {
+    final t = _transitPlan;
+    if (t != null) return t.points;
+    return _plan?.points ?? const <LatLng>[];
+  }
+
+  Future<void> _startNavigation() async {
+    if (_currentRoutePoints().length < 2) {
+      _snack('請先規劃路線，再開始導航。');
+      return;
+    }
+    try {
+      await _ensureLocationPermission();
+    } catch (e) {
+      _snack('$e'.replaceFirst('Exception: ', ''));
+      return;
+    }
+    await _positionSub?.cancel();
+    setState(() {
+      _navigating = true;
+      _deviationPrompted = false;
+    });
+    _positionSub = Geolocator.getPositionStream(
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 5,
+      ),
+    ).listen((pos) {
+      if (!mounted) return;
+      final p = LatLng(pos.latitude, pos.longitude);
+      final first = _myLocation == null;
+      setState(() => _myLocation = p);
+      if (first) _mapController.move(p, 17);
+      _checkDeviation(p);
+    }, onError: (e) {
+      if (!mounted) return;
+      _snack('GPS 讀取失敗：$e');
+      _stopNavigation();
+    });
+    _snack('已開始即時導航，正在接收 GPS…');
+  }
+
+  void _stopNavigation() {
+    _positionSub?.cancel();
+    _positionSub = null;
+    if (!mounted) return;
+    setState(() {
+      _navigating = false;
+      _deviationPrompted = false;
+    });
+    _snack('已停止導航');
+  }
+
+  void _checkDeviation(LatLng p) {
+    if (!_navigating) return;
+    final pts = _currentRoutePoints();
+    if (pts.length < 2) return;
+    final dist = _distanceToRouteMeters(p, pts);
+    if (dist > _offRouteThresholdM) {
+      if (_deviationPrompted) return;
+      _deviationPrompted = true;
+      _promptReroute();
+    } else if (dist < _offRouteThresholdM * 0.6) {
+      // 回到路線附近：允許下次再提示
+      _deviationPrompted = false;
+    }
+  }
+
+  Future<void> _promptReroute() async {
+    if (_offRouteDialogShowing || !mounted) return;
+    _offRouteDialogShowing = true;
+    final choice = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('已偏離原定路線'),
+        content: const Text('您目前不在原定路線上，是否要從目前位置重新規劃？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('繼續原路線'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('重新規劃'),
+          ),
+        ],
+      ),
+    );
+    _offRouteDialogShowing = false;
+    if (choice == true && mounted) {
+      final me = _myLocation;
+      if (me == null) return;
+      setState(() {
+        _origin = me;
+        _plan = null;
+        _transitPlan = null;
+        _deviationPrompted = false;
+      });
+      await _planRoute();
+    }
+  }
+
+  double _distanceToRouteMeters(LatLng p, List<LatLng> pts) {
+    var best = double.infinity;
+    for (var i = 0; i < pts.length; i++) {
+      final a = pts[i];
+      final b = i + 1 < pts.length ? pts[i + 1] : pts[i];
+      final d = _distanceToSegmentMeters(p, a, b);
+      if (d < best) best = d;
+    }
+    return best;
+  }
+
+  double _distanceToSegmentMeters(LatLng p, LatLng a, LatLng b) {
+    // 以 p 為原點的局部等距投影（公尺），短距離足夠準確。
+    final latRad = p.latitude * math.pi / 180;
+    const mPerDegLat = 110540.0;
+    final mPerDegLng = 111320.0 * math.cos(latRad);
+    double x(LatLng q) => (q.longitude - p.longitude) * mPerDegLng;
+    double y(LatLng q) => (q.latitude - p.latitude) * mPerDegLat;
+    final ax = x(a), ay = y(a);
+    final bx = x(b), by = y(b);
+    final dx = bx - ax, dy = by - ay;
+    final len2 = dx * dx + dy * dy;
+    var t = 0.0;
+    if (len2 > 0) {
+      t = (-ax * dx - ay * dy) / len2;
+      if (t < 0) t = 0;
+      if (t > 1) t = 1;
+    }
+    final cx = ax + t * dx;
+    final cy = ay + t * dy;
+    return math.sqrt(cx * cx + cy * cy);
   }
 
   List<Polyline> _polylines() {
@@ -799,6 +955,40 @@ class _MapScreenState extends State<MapScreen> {
                       ),
                     ],
                   ),
+                ],
+                if (plan != null || transit != null) ...[
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: _navigating
+                        ? OutlinedButton.icon(
+                            onPressed: _stopNavigation,
+                            icon: const Icon(Icons.stop_circle_outlined),
+                            label: const Text('停止即時導航'),
+                            style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
+                          )
+                        : FilledButton.tonalIcon(
+                            onPressed: _startNavigation,
+                            icon: const Icon(Icons.navigation),
+                            label: const Text('開始即時導航（顯示 GPS）'),
+                          ),
+                  ),
+                  if (_navigating)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 4),
+                      child: Row(
+                        children: [
+                          Icon(Icons.gps_fixed, size: 14, color: Colors.green),
+                          SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              '即時導航中：偏離路線時會詢問是否重新規劃',
+                              style: TextStyle(fontSize: 11, color: Colors.green),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                 ],
                 const SizedBox(height: 8),
                 SizedBox(
